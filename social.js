@@ -12,6 +12,7 @@
   const NICK_KEY = 'tl_nick';
   const CAT = { explore: '校園探索', game: '遊戲學習', teach: '教學互動' };
   const ART = { explore: 'sand', game: 'mint', teach: 'peach' };
+  const ROLE = { teacher: '教師作品', student: '學生作品', guest: '訪客作品' };
 
   const $ = (sel, root = document) => root.querySelector(sel);
 
@@ -79,7 +80,7 @@
       async listWorks() { return store.get(K.works, []).sort((a, b) => b.created_at.localeCompare(a.created_at)); },
       async addWork(w, blob) {
         const image_url = blob ? await blobToDataUrl(blob) : null;
-        const row = { id: uid(), ...w, image_url, author_id: S.user.id, created_at: new Date().toISOString() };
+        const row = { id: uid(), ...w, image_url, author_id: S.user.id, author_role: 'guest', created_at: new Date().toISOString() };
         store.set(K.works, [...store.get(K.works, []), row]);
         return row;
       },
@@ -340,7 +341,9 @@
     const img = safeImg(w.image_url);
     const href = safeUrl(w.url);
     const author = w.author_name || '同樂夥伴';
+    const role = ROLE[w.author_role] ? w.author_role : 'guest';
     const art = el('div', { class: `card-art ${ART[cat]}` },
+      el('span', { class: `role-badge ${role}`, text: ROLE[role] }),
       el('span', { class: 'card-no', text: 'COMMUNITY / 社群分享' }),
       img ? el('img', { src: img, alt: `${w.title} 的封面圖`, width: '600', height: '340', loading: 'lazy', referrerpolicy: 'no-referrer' })
           : el('div', { class: 'card-glyph', 'aria-hidden': 'true', text: '✳' }),
@@ -353,7 +356,7 @@
       el('ul', { class: 'tags', 'aria-label': '作品特色' }, tags),
       href ? el('a', { class: 'project-link', href, target: '_blank', rel: 'noopener noreferrer ugc' },
         '前往作品 ', el('span', { 'aria-hidden': 'true', text: '↗' }), el('span', { class: 'sr-only', text: '（另開分頁）' })) : null);
-    return el('article', { class: 'project-card', 'data-category': cat, 'data-work': k, 'data-user-work': '1' }, art, body);
+    return el('article', { class: 'project-card', 'data-category': cat, 'data-role': role, 'data-work': k, 'data-user-work': '1' }, art, body);
   }
 
   function insertWork(w, prepend) {

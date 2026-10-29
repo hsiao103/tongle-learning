@@ -81,3 +81,10 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{outline:3px soli
   .dlg-body{padding:22px 20px 18px}
 }
 @media(max-width:480px){.header nav>.nav-cta{display:none}}
+
+/* ===== 作品身分標示：學生作品／教師作品 ===== */
+.role-badge{position:absolute;top:11px;right:14px;z-index:1;font-size:10px;font-weight:700;line-height:1.5;padding:2px 10px;border-radius:12px;border:1px solid}
+.role-badge.teacher{background:#e4efe7;color:#17513d;border-color:#b5d0be}
+.role-badge.student{background:#fff0cf;color:#7a4d0a;border-color:#ebcf94}
+.role-badge.guest{background:#eceff2;color:#4a5560;border-color:#cfd6dc}
+.filter-sep{width:1px;background:var(--line);margin:5px 6px;align-self:stretch}

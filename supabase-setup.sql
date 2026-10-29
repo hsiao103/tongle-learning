@@ -15,8 +15,12 @@ create table if not exists public.works (
   image_url   text,
   author_id   uuid not null default auth.uid() references auth.users(id) on delete cascade,
   author_name text not null default '' check (char_length(author_name) <= 20),
+  author_role text not null default 'guest' check (author_role in ('teacher','student','guest')),
   created_at  timestamptz not null default now()
 );
+-- 已建立過資料表的話，補上作者身分欄位（可重複執行）
+alter table public.works add column if not exists author_role text not null default 'guest'
+  check (author_role in ('teacher','student','guest'));
 
 -- 2) 按讚：work_key 內建作品用代號（planet…），使用者作品為 'w:' || works.id
 create table if not exists public.likes (
@@ -53,6 +57,31 @@ as $$
     where lower(email) = lower(coalesce(auth.jwt() ->> 'email', ''))
   );
 $$;
+
+-- 4b) 作品身分標示：由資料庫依登入信箱網域自動判斷，前端無法竄改
+--     tmail.ilc.edu.tw → 教師作品；smail.ilc.edu.tw → 學生作品；管理者 → 教師作品；其他 → 訪客作品
+create or replace function public.set_author_role()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  mail text := lower(coalesce(auth.jwt() ->> 'email', ''));
+begin
+  if public.is_admin() or mail like '%@tmail.ilc.edu.tw' then
+    new.author_role := 'teacher';
+  elsif mail like '%@smail.ilc.edu.tw' then
+    new.author_role := 'student';
+  else
+    new.author_role := 'guest';
+  end if;
+  return new;
+end;
+$$;
+drop trigger if exists works_set_role on public.works;
+create trigger works_set_role before insert on public.works
+  for each row execute function public.set_author_role();
 
 -- 5) 刪除作品時，連同按讚與留言一併清除 ------------------------------------
 create or replace function public.cleanup_work()

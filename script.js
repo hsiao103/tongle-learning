@@ -7,6 +7,8 @@
   // 卡片可能由 social.js 在載入後動態新增，所以每次篩選都重新取得
   const getCards = () => [...document.querySelectorAll('.project-card')];
   const pad = n => String(n).padStart(2, '0');
+  // 'role:student' / 'role:teacher' 依作品身分篩選，其餘依分類篩選
+  const matches = (card, f) => f === 'all' || (f.startsWith('role:') ? card.dataset.role === f.slice(5) : card.dataset.category === f);
   function filterProjects(category) {
     if (!buttons.some(button => button.dataset.filter === category)) return;
     current = category;
@@ -18,7 +20,7 @@
     const cards = getCards();
     let count = 0;
     cards.forEach(card => {
-      card.hidden = category !== 'all' && card.dataset.category !== category;
+      card.hidden = !matches(card, category);
       if (!card.hidden) count++;
     });
     status.textContent = `共 ${count} 項作品`;
