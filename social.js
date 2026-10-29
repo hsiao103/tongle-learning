@@ -43,7 +43,8 @@
     likes: new Map(),           // work_key -> Set(user_id)
     commentCount: new Map(),    // work_key -> number
     comments: new Map(),        // work_key -> [comment]（展開留言後才載入）
-    works: new Map()            // 'w:'+id -> work
+    works: new Map(),           // 'w:'+id -> work
+    clicks: null                // work_key -> 累計開啟次數；null＝尚未載入或資料庫還沒建立統計功能
   };
   let api = null;
 
@@ -51,6 +52,19 @@
   const safeImg = u => (typeof u === 'string' && (/^https:\/\//.test(u) || /^data:image\/(jpeg|png|webp);base64,/.test(u))) ? u : null;
   const nick = () => String(store.get(NICK_KEY, '') || (S.user && S.user.name) || '同樂夥伴').slice(0, 20);
   const fmtDate = iso => { const d = new Date(iso); return isNaN(d) ? '' : d.toLocaleDateString('zh-TW', { year: 'numeric', month: 'numeric', day: 'numeric' }); };
+
+  /* ---- 點擊統計：匿名訪客代號（只存在這個瀏覽器，不含任何個資）---- */
+  const taipeiDay = () => new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10);
+  function visitorId() {
+    let v = store.get('tl_vid', '');
+    if (typeof v !== 'string' || v.length < 8) {
+      const a = new Uint8Array(12);
+      try { crypto.getRandomValues(a); } catch { for (let i = 0; i < a.length; i++) a[i] = Math.floor(Math.random() * 256); }
+      v = [...a].map(b => b.toString(16).padStart(2, '0')).join('');
+      store.set('tl_vid', v);
+    }
+    return v;
+  }
 
   let toastTimer;
   function toast(msg) {
@@ -103,7 +117,23 @@
         store.set(K.comments, [...store.get(K.comments, []), row]);
         return row;
       },
-      async deleteComment(id) { store.set(K.comments, store.get(K.comments, []).filter(c => c.id !== id)); }
+      async deleteComment(id) { store.set(K.comments, store.get(K.comments, []).filter(c => c.id !== id)); },
+      async trackClick(key) {
+        const rows = store.get('tl_demo_clicks', []), day = taipeiDay(), v = visitorId();
+        if (rows.some(r => r.work_key === key && r.visitor === v && r.day === day)) return;
+        rows.push({ work_key: key, visitor: v, day, role: S.user ? 'teacher' : 'guest' });
+        store.set('tl_demo_clicks', rows);
+      },
+      async clickCounts() {
+        const m = {};
+        store.get('tl_demo_clicks', []).forEach(r => { m[r.work_key] = (m[r.work_key] || 0) + 1; });
+        return Object.entries(m).map(([work_key, total]) => ({ work_key, total }));
+      },
+      async clickStats(days) {
+        const from = new Date(Date.now() + 8 * 3600e3 - (days - 1) * 86400e3).toISOString().slice(0, 10), m = {};
+        store.get('tl_demo_clicks', []).filter(r => r.day >= from).forEach(r => { const k = r.work_key + '|' + r.role + '|' + r.day; m[k] = (m[k] || 0) + 1; });
+        return Object.entries(m).map(([k, n]) => { const [work_key, role, day] = k.split('|'); return { work_key, role, day, n }; });
+      }
     };
   }
 
@@ -170,7 +200,16 @@
       async addComment(key, body) {
         return must(await sb.from('comments').insert({ work_key: key, user_id: S.user.id, author_name: nick(), avatar_url: S.user.avatar || null, body }).select().single());
       },
-      async deleteComment(id) { must(await sb.from('comments').delete().eq('id', id)); }
+      async deleteComment(id) { must(await sb.from('comments').delete().eq('id', id)); },
+      // 點擊紀錄用 keepalive 直接送出，即使同一分頁立刻跳轉也不會被中斷；失敗時靜默略過，不影響使用者
+      async trackClick(key) {
+        const { data } = await sb.auth.getSession();
+        const headers = { apikey: cfg.supabaseAnonKey, 'Content-Type': 'application/json' };
+        if (data && data.session) headers.Authorization = 'Bearer ' + data.session.access_token;
+        await fetch(cfg.supabaseUrl + '/rest/v1/rpc/track_click', { method: 'POST', keepalive: true, headers, body: JSON.stringify({ p_key: key, p_visitor: visitorId() }) });
+      },
+      async clickCounts() { return must(await sb.rpc('click_counts')); },
+      async clickStats(days) { return must(await sb.rpc('click_stats', { p_days: days })); }
     };
   }
 
@@ -218,14 +257,17 @@
       el('span', { text: '留言' }),
       el('span', { class: 'count', text: '0' }));
     const delBtn = el('button', { class: 'del-btn', type: 'button', hidden: true, text: '刪除作品', 'aria-label': `刪除作品「${title}」` });
+    const clickInfo = el('span', { class: 'click-count', hidden: true, title: '累計開啟次數（同一位訪客、同一作品、同一天只算一次）' });
     const panel = el('div', { class: 'cmt-panel', id: pid, hidden: true });
-    $('.card-body', card).append(el('div', { class: 'social', 'data-key': k }, el('div', { class: 'social-row' }, likeBtn, cmtBtn, delBtn), panel));
+    $('.card-body', card).append(el('div', { class: 'social', 'data-key': k }, el('div', { class: 'social-row' }, likeBtn, cmtBtn, delBtn, clickInfo), panel));
     likeBtn.addEventListener('click', () => onLike(k, likeBtn));
     cmtBtn.addEventListener('click', () => togglePanel(k, cmtBtn, panel));
     delBtn.addEventListener('click', () => onDeleteWork(k));
   }
 
   function paint() {
+    const sb = $('#stats-btn');
+    if (sb) sb.hidden = !S.admin;
     document.querySelectorAll('.social').forEach(s => {
       const k = s.dataset.key;
       const likers = S.likes.get(k) || new Set();
@@ -236,6 +278,11 @@
       $('.like-text', lb).textContent = liked ? '已按讚' : '按讚';
       $('.count', lb).textContent = String(likers.size);
       $('.cmt-btn .count', s).textContent = String(S.commentCount.get(k) || 0);
+      const ci = $('.click-count', s);
+      if (ci) {
+        ci.hidden = !S.clicks;
+        if (S.clicks) { const n = S.clicks.get(k) || 0; ci.textContent = `↗ 開啟 ${n} 次`; ci.setAttribute('aria-label', `已被開啟 ${n} 次`); }
+      }
       const w = S.works.get(k);
       $('.del-btn', s).hidden = !(w && S.user && (S.admin || w.author_id === S.user.id));
       const panel = $('.cmt-panel', s);
@@ -456,6 +503,67 @@
   }
 
   /* ---------------------------------------------------------------
+   * 點擊統計：記錄、顯示、管理者面板
+   * ------------------------------------------------------------- */
+  function onOpenWork(e) {
+    if (e.type === 'auxclick' && e.button !== 1) return;   // 中鍵開新分頁也算
+    const a = e.target.closest && e.target.closest('a.project-link');
+    const card = a && a.closest('.project-card[data-work]');
+    if (!card || !api) return;
+    const key = card.dataset.work, day = taipeiDay();
+    const seen = store.get('tl_clk', {});
+    const keys = seen.day === day ? seen.keys : [];
+    if (keys.includes(key)) return;                         // 今天已記過，不重複送出
+    store.set('tl_clk', { day, keys: [...keys, key] });
+    api.trackClick(key).then(() => {
+      if (S.clicks) { S.clicks.set(key, (S.clicks.get(key) || 0) + 1); paint(); }
+    }).catch(() => {});
+  }
+
+  async function loadClicks() {
+    try {
+      const rows = await api.clickCounts();
+      S.clicks = new Map(rows.map(r => [r.work_key, Number(r.total)]));
+    } catch (e) { S.clicks = null; }                        // 資料庫尚未執行統計的 SQL：不顯示，其他功能照常
+    paint();
+  }
+
+  const ROLE_TXT = { guest: '訪客', teacher: '教師', student: '學生' };
+  async function openStats() {
+    const dlg = $('#stats-dialog'), body = $('#stats-body'), sel = $('#stats-range');
+    openDlg(dlg);
+    body.replaceChildren(el('p', { class: 'dlg-note', text: '載入中…' }));
+    let rows;
+    try { rows = await api.clickStats(Number(sel.value)); }
+    catch (e) { console.error(e); body.replaceChildren(el('p', { class: 'dlg-note', text: '無法讀取統計：請確認已執行最新的 supabase-setup.sql，且你的信箱已加入管理者名單。' })); return; }
+    const title = k => { const c = $(`.project-card[data-work="${CSS.escape(k)}"] h3`); return c ? c.textContent : (k + '（已移除）'); };
+    const per = new Map(), perDay = new Map();
+    let total = 0;
+    rows.forEach(r => {
+      const n = Number(r.n); total += n;
+      const o = per.get(r.work_key) || { total: 0, guest: 0, teacher: 0, student: 0 };
+      o.total += n; o[r.role] = (o[r.role] || 0) + n; per.set(r.work_key, o);
+      perDay.set(r.day, (perDay.get(r.day) || 0) + n);
+    });
+    const list = [...per.entries()].sort((a, b) => b[1].total - a[1].total);
+    const max = list.length ? list[0][1].total : 1;
+    const head = el('p', { class: 'stats-total' }, '期間總開啟 ', el('strong', { text: String(total) }), ' 次（每位訪客每天、每個作品最多算一次）');
+    const table = el('table', { class: 'stats-table' },
+      el('thead', {}, el('tr', {}, ['作品', '合計', '訪客', '教師', '學生'].map(h => el('th', { scope: 'col', text: h })))),
+      el('tbody', {}, list.length ? list.map(([k, o]) => el('tr', {},
+        el('th', { scope: 'row' }, el('span', { text: title(k) }), el('span', { class: 'bar', style: `width:${Math.max(3, Math.round(o.total / max * 100))}%`, 'aria-hidden': 'true' })),
+        el('td', { text: String(o.total) }), el('td', { text: String(o.guest) }), el('td', { text: String(o.teacher) }), el('td', { text: String(o.student) })))
+        : [el('tr', {}, el('td', { colspan: '5', text: '這段期間還沒有點擊紀錄。' }))]));
+    const days = Number(sel.value), dayEls = [], dayMax = Math.max(1, ...perDay.values());
+    for (let i = days - 1; i >= 0; i--) {
+      const d = new Date(Date.now() + 8 * 3600e3 - i * 86400e3).toISOString().slice(0, 10), n = perDay.get(d) || 0;
+      dayEls.push(el('span', { class: 'dbar', title: `${d}：${n} 次`, style: `height:${Math.max(2, Math.round(n / dayMax * 100))}%` }));
+    }
+    body.replaceChildren(head, el('div', { class: 'stats-days', role: 'img', 'aria-label': `每日開啟次數長條圖，共 ${days} 天` }, dayEls), el('div', { class: 'stats-scroll' }, table),
+      el('p', { class: 'dlg-note', text: `身分依登入信箱網域判斷（tmail＝教師、smail＝學生），未登入一律算訪客。` }));
+  }
+
+  /* ---------------------------------------------------------------
    * 初始化
    * ------------------------------------------------------------- */
   function showBanner(msg) {
@@ -481,6 +589,10 @@
       paintAuth();
     });
     $('#add-form').addEventListener('submit', onAddSubmit);
+    document.addEventListener('click', onOpenWork);
+    document.addEventListener('auxclick', onOpenWork);
+    const sbtn = $('#stats-btn');
+    if (sbtn) { sbtn.addEventListener('click', openStats); $('#stats-range').addEventListener('change', openStats); }
   }
 
   async function loadData() {
@@ -514,6 +626,7 @@
     S.admin = S.user ? await api.isAdmin().catch(() => false) : false;
     paintAuth();
     await loadData();
+    loadClicks();
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();

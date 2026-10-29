@@ -110,3 +110,19 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{outline:3px soli
 
 /* ✳ 在手機上會被當成彩色 emoji（綠色方塊），強制使用文字樣式 */
 .brand-icon,.ribbon-end b,.card-glyph,.mini-orbit{font-variant-emoji:text}
+
+/* ===== 點擊統計 ===== */
+.click-count{margin-left:auto;font-size:11px;color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums}
+.click-count[hidden]{display:none}
+.dlg.wide{width:min(720px,calc(100vw - 32px))}
+.stats-total{font-size:13px}.stats-total strong{font-size:20px;color:var(--green)}
+.stats-days{display:flex;align-items:flex-end;gap:2px;height:64px;padding:4px 0;border-bottom:1px solid var(--line)}
+.stats-days .dbar{flex:1;min-width:2px;background:var(--gold);border-radius:2px 2px 0 0}
+.stats-scroll{overflow:auto;max-height:46vh}
+.stats-table{width:100%;border-collapse:collapse;font-size:12px}
+.stats-table th,.stats-table td{padding:8px 6px;border-bottom:1px solid var(--line);text-align:right;font-variant-numeric:tabular-nums}
+.stats-table thead th{color:var(--muted);font-weight:600;position:sticky;top:0;background:#fffefb}
+.stats-table tbody th{text-align:left;font-weight:600;position:relative;min-width:170px}
+.stats-table tbody th>span:first-child{position:relative;z-index:1}
+.stats-table .bar{position:absolute;left:0;bottom:3px;height:4px;background:var(--green);opacity:.55;border-radius:2px}
+.stats-table thead th:first-child{text-align:left}

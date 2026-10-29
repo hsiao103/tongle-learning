@@ -142,5 +142,74 @@ create policy "work-covers upload" on storage.objects for insert to authenticate
 create policy "work-covers delete" on storage.objects for delete to authenticated
   using (bucket_id = 'work-covers' and ((storage.foldername(name))[1] = auth.uid()::text or public.is_admin()));
 
+-- 7b) 作品點擊統計（含未登入訪客）--------------------------------------------
+-- 每位訪客（瀏覽器內的匿名隨機代號）、每個作品、每天最多記一筆；不記 IP、姓名或信箱。
+-- 資料表開啟 RLS 且不建立任何 policy：前端無法直接讀寫，只能透過下面三個函式。
+create table if not exists public.clicks (
+  id         bigint generated always as identity primary key,
+  work_key   text not null check (work_key ~ '^(w:[0-9a-f-]{36}|[a-z0-9-]{1,40})$'),
+  visitor    text not null check (char_length(visitor) between 8 and 64),
+  day        date not null default ((now() at time zone 'Asia/Taipei')::date),
+  role       text not null default 'guest' check (role in ('teacher','student','guest')),
+  created_at timestamptz not null default now(),
+  unique (work_key, visitor, day)
+);
+create index if not exists clicks_day_idx on public.clicks (day);
+alter table public.clicks enable row level security;
+
+-- 記錄一次開啟（任何人可呼叫，重複的會被忽略）；身分由登入信箱網域在資料庫端判斷
+create or replace function public.track_click(p_key text, p_visitor text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  mail text := lower(coalesce(auth.jwt() ->> 'email', ''));
+  r text := 'guest';
+begin
+  if public.is_admin() or mail like '%@tmail.ilc.edu.tw' then r := 'teacher';
+  elsif mail like '%@smail.ilc.edu.tw' then r := 'student';
+  end if;
+  insert into public.clicks (work_key, visitor, role) values (p_key, p_visitor, r)
+  on conflict (work_key, visitor, day) do nothing;
+end;
+$$;
+
+-- 各作品累計開啟次數（公開，只回傳總數）
+create or replace function public.click_counts()
+returns table (work_key text, total bigint)
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select c.work_key, count(*)::bigint from public.clicks c group by c.work_key;
+$$;
+
+-- 詳細統計（僅管理者）：依作品、身分、日期彙總
+create or replace function public.click_stats(p_days int default 30)
+returns table (work_key text, role text, day date, n bigint)
+language plpgsql
+security definer
+set search_path = public
+stable
+as $$
+begin
+  if not public.is_admin() then
+    raise exception 'forbidden' using errcode = '42501';
+  end if;
+  return query
+    select c.work_key, c.role, c.day, count(*)::bigint
+    from public.clicks c
+    where c.day >= ((now() at time zone 'Asia/Taipei')::date - greatest(1, least(p_days, 365)) + 1)
+    group by c.work_key, c.role, c.day;
+end;
+$$;
+
+grant execute on function public.track_click(text, text) to anon, authenticated;
+grant execute on function public.click_counts()           to anon, authenticated;
+grant execute on function public.click_stats(int)         to authenticated;
+
 -- 8) 設定管理者（改成你的 Google 信箱後執行）---------------------------------
 -- insert into public.admins (email) values ('你的信箱@gmail.com') on conflict do nothing;
