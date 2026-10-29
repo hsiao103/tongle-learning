@@ -5,6 +5,6 @@
 //    anon key 設計上就是公開的，資料安全由資料表的 RLS 規則負責，可以放心放在 GitHub。
 // 兩個值都留空時，頁面會進入「示範模式」：功能可試玩，但資料只存在這個瀏覽器。
 window.TONGLE_CONFIG = {
-  supabaseUrl: '',      // 例：https://abcdxyz.supabase.co
-  supabaseAnonKey: ''   // 例：eyJhbGciOi...（anon / publishable key）
+  supabaseUrl: 'https://sjhibwvjiupjjwokawuk.supabase.co',      // 例：https://abcdxyz.supabase.co
+  supabaseAnonKey: 'sb_publishable_azKOkCRTtidnIp9chJa2FA_c85MX3XY'   // 例：eyJhbGciOi...（anon / publishable key）
 };
