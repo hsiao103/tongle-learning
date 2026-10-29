@@ -346,7 +346,7 @@
       el('span', { class: `role-badge ${role}`, text: ROLE[role] }),
       el('span', { class: 'card-no', text: 'COMMUNITY / 社群分享' }),
       img ? el('img', { src: img, alt: `${w.title} 的封面圖`, width: '600', height: '340', loading: 'lazy', referrerpolicy: 'no-referrer' })
-          : el('div', { class: 'card-glyph', 'aria-hidden': 'true', text: '✳' }),
+          : el('div', { class: 'card-glyph', 'aria-hidden': 'true', text: '✳︎' }),
       el('span', { class: 'art-chip', text: `分享者・${author}` }));
     const tags = (Array.isArray(w.tags) ? w.tags : []).slice(0, 4).map(t => el('li', { text: String(t).slice(0, 12) }));
     const body = el('div', { class: 'card-body' },

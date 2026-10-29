@@ -107,3 +107,6 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{outline:3px soli
 .wtc .mailpop button:hover,.wtc .mailpop a:hover{background:#e9eee3}
 .wtc .mailpop .mgm{background:var(--green);color:#fff;font-weight:700}.wtc .mailpop .mgm:hover{background:#153f32}
 .wtc .mailpop .mapp{border-color:transparent;background:none;text-decoration:underline;color:var(--muted)}
+
+/* ✳ 在手機上會被當成彩色 emoji（綠色方塊），強制使用文字樣式 */
+.brand-icon,.ribbon-end b,.card-glyph,.mini-orbit{font-variant-emoji:text}
