@@ -44,6 +44,8 @@
     commentCount: new Map(),    // work_key -> number
     comments: new Map(),        // work_key -> [comment]（展開留言後才載入）
     works: new Map(),           // 'w:'+id -> work
+    wishes: [],                 // 許願池（只在登入後載入）
+    wvotes: new Map(),          // wish_id -> Set(user_id)
     clicks: null                // work_key -> 累計開啟次數；null＝尚未載入或資料庫還沒建立統計功能
   };
   let api = null;
@@ -118,6 +120,23 @@
         return row;
       },
       async deleteComment(id) { store.set(K.comments, store.get(K.comments, []).filter(c => c.id !== id)); },
+      async listWishes() { return store.get('tl_demo_wishes', []); },
+      async addWish(body) {
+        const row = { id: uid(), user_id: S.user.id, author_name: nick(), avatar_url: '', body, status: 'open', created_at: new Date().toISOString() };
+        store.set('tl_demo_wishes', [row, ...store.get('tl_demo_wishes', [])]);
+        return row;
+      },
+      async deleteWish(id) {
+        store.set('tl_demo_wishes', store.get('tl_demo_wishes', []).filter(w => w.id !== id));
+        store.set('tl_demo_wvotes', store.get('tl_demo_wvotes', []).filter(v => v.wish_id !== id));
+      },
+      async setWishStatus(id, status) { store.set('tl_demo_wishes', store.get('tl_demo_wishes', []).map(w => (w.id === id ? { ...w, status } : w))); },
+      async listWishVotes() { return store.get('tl_demo_wvotes', []); },
+      async setWishVote(id, on) {
+        const rest = store.get('tl_demo_wvotes', []).filter(v => !(v.wish_id === id && v.user_id === S.user.id));
+        if (on) rest.push({ wish_id: id, user_id: S.user.id });
+        store.set('tl_demo_wvotes', rest);
+      },
       async trackClick(key) {
         const rows = store.get('tl_demo_clicks', []), day = taipeiDay(), v = visitorId();
         if (rows.some(r => r.work_key === key && r.visitor === v && r.day === day)) return;
@@ -201,6 +220,17 @@
         return must(await sb.from('comments').insert({ work_key: key, user_id: S.user.id, author_name: nick(), avatar_url: S.user.avatar || null, body }).select().single());
       },
       async deleteComment(id) { must(await sb.from('comments').delete().eq('id', id)); },
+      async listWishes() { return must(await sb.from('wishes').select('id,user_id,author_name,avatar_url,body,status,created_at').order('created_at', { ascending: false }).limit(300)); },
+      async addWish(body) { return must(await sb.from('wishes').insert({ user_id: S.user.id, author_name: nick(), avatar_url: S.user.avatar || null, body }).select().single()); },
+      async deleteWish(id) { must(await sb.from('wishes').delete().eq('id', id)); },
+      async setWishStatus(id, status) { must(await sb.from('wishes').update({ status }).eq('id', id)); },
+      async listWishVotes() { return must(await sb.from('wish_votes').select('wish_id,user_id').limit(20000)); },
+      async setWishVote(id, on) {
+        if (on) {
+          const { error } = await sb.from('wish_votes').insert({ wish_id: id, user_id: S.user.id });
+          if (error && error.code !== '23505') throw error;
+        } else must(await sb.from('wish_votes').delete().eq('wish_id', id).eq('user_id', S.user.id));
+      },
       // 點擊紀錄用 keepalive 直接送出，即使同一分頁立刻跳轉也不會被中斷；失敗時靜默略過，不影響使用者
       async trackClick(key) {
         const { data } = await sb.auth.getSession();
@@ -428,6 +458,92 @@
   }
 
   /* ---------------------------------------------------------------
+   * 許願池：只有登入者看得到（前端隱藏＋資料庫 RLS 雙重把關）
+   * ------------------------------------------------------------- */
+  function paintWishes() {
+    const sec = $('#wishes'), nav = $('#wish-nav');
+    const on = Boolean(S.user);
+    if (sec) sec.hidden = !on;
+    if (nav) nav.hidden = !on;
+    const list = $('#wish-list');
+    if (!on || !list) { if (list) list.replaceChildren(); return; }
+    const votes = w => (S.wvotes.get(w.id) || new Set()).size;
+    const items = [...S.wishes].sort((a, b) => (a.status === 'done') - (b.status === 'done') || votes(b) - votes(a) || b.created_at.localeCompare(a.created_at));
+    list.replaceChildren();
+    if (!items.length) list.append(el('li', { class: 'wish-empty', text: '許願池還是空的，來投下第一個願望吧！' }));
+    items.forEach(w => {
+      const set = S.wvotes.get(w.id) || new Set();
+      const voted = set.has(S.user.id);
+      const mine = w.user_id === S.user.id;
+      const meta = el('div', { class: 'wish-meta' }, el('strong', { text: w.author_name || '同樂夥伴' }), el('time', { datetime: w.created_at, text: fmtDate(w.created_at) }));
+      if (w.status === 'done') meta.append(el('span', { class: 'wish-badge', text: '✓ 已實現' }));
+      const acts = el('div', { class: 'wish-actions' },
+        el('button', { type: 'button', class: 'wish-vote', 'aria-pressed': String(voted), onclick: () => onWishVote(w.id) }, `🙏 我也想要 ${set.size}`));
+      if (S.admin) acts.append(el('button', { type: 'button', class: 'wish-link', text: w.status === 'done' ? '改回許願中' : '標為已實現', onclick: () => onWishStatus(w) }));
+      if (mine || S.admin) acts.append(el('button', { type: 'button', class: 'wish-link', text: '刪除', 'aria-label': '刪除這個願望', onclick: () => onWishDelete(w.id) }));
+      list.append(el('li', { class: 'wish-item' + (w.status === 'done' ? ' done' : '') }, meta, el('p', { text: w.body }), acts));
+    });
+  }
+
+  let wishSeq = 0;
+  async function loadWishes() {
+    const seq = ++wishSeq;
+    if (!S.user) { S.wishes = []; S.wvotes = new Map(); paintWishes(); return; }
+    try {
+      const [ws, vs] = await Promise.all([api.listWishes(), api.listWishVotes()]);
+      if (seq !== wishSeq || !S.user) return;
+      S.wishes = ws;
+      S.wvotes = new Map();
+      vs.forEach(v => { if (!S.wvotes.has(v.wish_id)) S.wvotes.set(v.wish_id, new Set()); S.wvotes.get(v.wish_id).add(v.user_id); });
+    } catch (e) {
+      console.error(e);
+      S.wishes = []; S.wvotes = new Map();
+      toast('許願池讀取失敗。若剛設定好，請確認已執行最新的 supabase-setup.sql。');
+    }
+    paintWishes();
+  }
+
+  async function onWishSubmit(e) {
+    e.preventDefault();
+    if (!S.user) return needLogin('使用許願池');
+    const ta = $('#wish-body'), btn = $('#wish-form button[type=submit]');
+    const body = ta.value.trim();
+    if (body.length < 2) { toast('願望至少要寫 2 個字喔'); return; }
+    btn.disabled = true;
+    try {
+      const row = await api.addWish(body.slice(0, 200));
+      S.wishes = [row, ...S.wishes];
+      ta.value = ''; $('#wish-count').textContent = '0 / 200';
+      paintWishes(); toast('願望已投進許願池 🪙');
+    } catch (err) {
+      console.error(err);
+      toast(err && err.code === 'P0001' ? '今天許太多願望囉，明天再來吧！' : '投遞失敗，請稍後再試');
+    } finally { btn.disabled = false; }
+  }
+
+  async function onWishVote(id) {
+    if (!S.user) return needLogin('使用許願池');
+    const set = S.wvotes.get(id) || new Set();
+    const was = set.has(S.user.id);
+    if (was) set.delete(S.user.id); else set.add(S.user.id);
+    S.wvotes.set(id, set); paintWishes();
+    try { await api.setWishVote(id, !was); }
+    catch (err) { console.error(err); if (was) set.add(S.user.id); else set.delete(S.user.id); paintWishes(); toast('操作失敗，請稍後再試'); }
+  }
+
+  async function onWishStatus(w) {
+    const next = w.status === 'done' ? 'open' : 'done';
+    try { await api.setWishStatus(w.id, next); w.status = next; paintWishes(); }
+    catch (err) { console.error(err); toast('更新失敗，請稍後再試'); }
+  }
+
+  async function onWishDelete(id) {
+    if (!confirm('確定要刪除這個願望嗎？')) return;
+    try { await api.deleteWish(id); S.wishes = S.wishes.filter(w => w.id !== id); S.wvotes.delete(id); paintWishes(); }
+    catch (err) { console.error(err); toast('刪除失敗，請稍後再試'); }
+  }
+
+  /* ---------------------------------------------------------------
    * 登入與帳號
    * ------------------------------------------------------------- */
   function needLogin(action) {
@@ -454,7 +570,7 @@
     if ((u && u.id) === (S.user && S.user.id)) return;
     S.user = u;
     S.admin = u ? await api.isAdmin().catch(() => false) : false;
-    paintAuth(); paint();
+    paintAuth(); paint(); loadWishes();
     if (u) closeDlg($('#login-dialog'));
   }
 
@@ -589,6 +705,8 @@
       paintAuth();
     });
     $('#add-form').addEventListener('submit', onAddSubmit);
+    $('#wish-form').addEventListener('submit', onWishSubmit);
+    $('#wish-body').addEventListener('input', e => { $('#wish-count').textContent = `${e.target.value.length} / 200`; });
     document.addEventListener('click', onOpenWork);
     document.addEventListener('auxclick', onOpenWork);
     const sbtn = $('#stats-btn');
@@ -627,6 +745,7 @@
     paintAuth();
     await loadData();
     loadClicks();
+    loadWishes();
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();

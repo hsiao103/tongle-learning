@@ -211,5 +211,57 @@ grant execute on function public.track_click(text, text) to anon, authenticated;
 grant execute on function public.click_counts()           to anon, authenticated;
 grant execute on function public.click_stats(int)         to authenticated;
 
+-- 7c) 許願池（必須登入才讀得到；未登入者連資料表都看不到）----------------------
+create table if not exists public.wishes (
+  id          uuid primary key default gen_random_uuid(),
+  user_id     uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  author_name text not null default '' check (char_length(author_name) <= 20),
+  avatar_url  text,
+  body        text not null check (char_length(body) between 2 and 200),
+  status      text not null default 'open' check (status in ('open','done')),
+  created_at  timestamptz not null default now()
+);
+create index if not exists wishes_created_idx on public.wishes (created_at desc);
+
+create table if not exists public.wish_votes (
+  wish_id uuid not null references public.wishes(id) on delete cascade,
+  user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  primary key (wish_id, user_id)
+);
+
+-- 防洗版：每人 24 小時內最多許 10 個願望
+create or replace function public.wish_limit()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if (select count(*) from public.wishes where user_id = new.user_id and created_at > now() - interval '24 hours') >= 10 then
+    raise exception 'wish limit' using errcode = 'P0001';
+  end if;
+  return new;
+end $$;
+drop trigger if exists wishes_limit on public.wishes;
+create trigger wishes_limit before insert on public.wishes for each row execute function public.wish_limit();
+
+alter table public.wishes     enable row level security;
+alter table public.wish_votes enable row level security;
+drop policy if exists "wishes read"   on public.wishes;
+drop policy if exists "wishes add"    on public.wishes;
+drop policy if exists "wishes status" on public.wishes;
+drop policy if exists "wishes delete" on public.wishes;
+create policy "wishes read"   on public.wishes for select to authenticated using (true);
+create policy "wishes add"    on public.wishes for insert to authenticated with check (user_id = auth.uid() and status = 'open');
+create policy "wishes status" on public.wishes for update to authenticated using (public.is_admin()) with check (public.is_admin());
+create policy "wishes delete" on public.wishes for delete to authenticated using (user_id = auth.uid() or public.is_admin());
+-- 更新只開放 status 欄位（管理者標示「已實現」）
+revoke update on public.wishes from authenticated, anon;
+grant update (status) on public.wishes to authenticated;
+revoke all on public.wishes, public.wish_votes from anon;
+
+drop policy if exists "wish_votes read"   on public.wish_votes;
+drop policy if exists "wish_votes add"    on public.wish_votes;
+drop policy if exists "wish_votes delete" on public.wish_votes;
+create policy "wish_votes read"   on public.wish_votes for select to authenticated using (true);
+create policy "wish_votes add"    on public.wish_votes for insert to authenticated with check (user_id = auth.uid());
+create policy "wish_votes delete" on public.wish_votes for delete to authenticated using (user_id = auth.uid());
+
 -- 8) 設定管理者（改成你的 Google 信箱後執行）---------------------------------
 -- insert into public.admins (email) values ('你的信箱@gmail.com') on conflict do nothing;

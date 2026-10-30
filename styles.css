@@ -126,3 +126,28 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{outline:3px soli
 .stats-table tbody th>span:first-child{position:relative;z-index:1}
 .stats-table .bar{position:absolute;left:0;bottom:3px;height:4px;background:var(--green);opacity:.55;border-radius:2px}
 .stats-table thead th:first-child{text-align:left}
+
+/* 許願池（登入後才顯示） */
+.wishes{padding-top:70px;padding-bottom:70px;border-top:1px solid var(--line)}
+.wishes[hidden],#wish-nav[hidden]{display:none}
+.wish-form{margin:28px 0 8px;display:flex;flex-direction:column;gap:10px;max-width:760px}
+.wish-form textarea{font:inherit;font-size:14px;line-height:1.7;border:1px solid #c9d4c8;border-radius:10px;padding:12px 14px;background:#fff;color:var(--ink);width:100%;resize:vertical;min-height:72px}
+.wish-form-row{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.wish-count{font-size:11px;color:var(--muted)}
+.wish-list{list-style:none;margin:22px 0 0;padding:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.wish-item{border:1px solid var(--line);border-radius:12px;background:#fffefb;padding:16px 18px;display:flex;flex-direction:column;gap:10px}
+.wish-item.done{background:#eef3e8;border-color:#bfd0b6}
+.wish-item p{margin:0;font-size:14px;line-height:1.8;white-space:pre-wrap;overflow-wrap:anywhere}
+.wish-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:11px;color:var(--muted)}
+.wish-meta strong{color:var(--ink);font-weight:700}
+.wish-badge{background:var(--green);color:#fff;border-radius:20px;padding:1px 9px;font-size:10px;font-weight:700}
+.wish-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:auto}
+.wish-vote{border:1px solid var(--green);background:transparent;color:var(--green);border-radius:20px;padding:5px 14px;font-size:12px;font-weight:700}
+.wish-vote:hover{background:#e9eee3}
+.wish-vote[aria-pressed="true"]{background:var(--green);color:#fff}
+.wish-link{border:0;background:transparent;color:var(--muted);font-size:11px;text-decoration:underline;padding:4px 2px}
+.wish-link:hover{color:#a36820}
+.wish-empty{grid-column:1/-1;text-align:center;color:var(--muted);font-size:13px;padding:26px 0}
+.wish-note{font-size:11px;color:var(--muted);margin:22px 0 0}
+#wish-nav{white-space:nowrap}
+@media(max-width:650px){.wishes{padding-top:48px;padding-bottom:44px}.wish-list{grid-template-columns:1fr}.wish-note{font-size:11px}}
