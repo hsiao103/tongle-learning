@@ -7,7 +7,7 @@
 (() => {
   const cfg = window.TONGLE_CONFIG || {};
   const LIVE = Boolean(cfg.supabaseUrl && cfg.supabaseAnonKey);
-  const SDK = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js';
+  const SDK = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.min.js';
   const BUCKET = 'work-covers';
   const NICK_KEY = 'tl_nick';
   const CAT = { explore: '校園探索', game: '遊戲學習', teach: '教學互動' };
