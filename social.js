@@ -503,6 +503,18 @@
     paintWishes();
   }
 
+  // 依錯誤代碼給出具體原因，方便判斷是資料表沒建、權限、登入過期或內容不符
+  function wishErrText(err) {
+    const code = String((err && err.code) || ''), msg = String((err && err.message) || '');
+    if (code === 'P0001') return '今天許太多願望囉，明天再來吧！';
+    if (code === '42P01' || code === 'PGRST205' || code === 'PGRST204') return '許願池資料表尚未建立（管理員請在 Supabase 執行 supabase-setup.sql 的 7c 段）';
+    if (code === '42501') return '沒有投遞權限（資料庫的權限規則設定有誤）';
+    if (code === '23514') return '願望字數需 2～200 字，或暱稱超過 20 字';
+    if (code === 'PGRST301' || /jwt|token/i.test(msg)) return '登入已過期，請重新登入後再試';
+    if (/failed to fetch|network/i.test(msg)) return '網路連不上，請檢查網路後再試';
+    return '投遞失敗，請稍後再試' + (code ? `（錯誤代碼 ${code}）` : '');
+  }
+
   async function onWishSubmit(e) {
     e.preventDefault();
     if (!S.user) return needLogin('使用許願池');
@@ -517,7 +529,7 @@
       paintWishes(); toast('願望已投進許願池 🪙');
     } catch (err) {
       console.error(err);
-      toast(err && err.code === 'P0001' ? '今天許太多願望囉，明天再來吧！' : '投遞失敗，請稍後再試');
+      toast(wishErrText(err));
     } finally { btn.disabled = false; }
   }
 
