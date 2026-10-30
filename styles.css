@@ -16,13 +16,16 @@
 .social{border-top:1px solid var(--line);padding:11px 0 15px}
 .social [hidden]{display:none!important}
 .social-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.like-btn,.cmt-btn,.del-btn{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:#fff;border-radius:20px;padding:6px 13px;font-size:12px;line-height:1.5;color:var(--muted);transition:background .2s,border-color .2s,color .2s}
+.like-btn,.cmt-btn,.edit-btn,.del-btn{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:#fff;border-radius:20px;padding:6px 13px;font-size:12px;line-height:1.5;color:var(--muted);transition:background .2s,border-color .2s,color .2s}
 .like-btn:hover,.cmt-btn:hover{border-color:#91a68e;color:var(--ink)}
 .like-btn[aria-pressed="true"]{background:#fdeceb;border-color:#e7a39d;color:#b23a30}
 .like-btn[aria-pressed="true"] .heart{display:inline-block;animation:heart-pop .3s}
 .like-btn:disabled{opacity:.65;cursor:wait}
 .cmt-btn[aria-expanded="true"]{background:#e9eee3;border-color:#a9b9ab;color:var(--ink)}
 .social .count{font-variant-numeric:tabular-nums;font-weight:700}
+.edit-btn{margin-left:auto;border-color:transparent;background:transparent;font-size:11px}
+.edit-btn:hover{color:var(--ink,#1f3d36);border-color:var(--line)}
+.edit-btn:not([hidden])+.del-btn{margin-left:0}
 .del-btn{margin-left:auto;border-color:transparent;background:transparent;font-size:11px}
 .del-btn:hover{color:#b23a30;border-color:#e7a39d}
 @keyframes heart-pop{50%{transform:scale(1.4)}}

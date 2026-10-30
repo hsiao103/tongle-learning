@@ -100,6 +100,12 @@
         store.set(K.works, [...store.get(K.works, []), row]);
         return row;
       },
+      async updateWork(w, patch, blob) {
+        const row = { ...w, ...patch };
+        if (blob) row.image_url = await blobToDataUrl(blob);
+        store.set(K.works, store.get(K.works, []).map(x => (x.id === w.id ? row : x)));
+        return row;
+      },
       async deleteWork(w) {
         const key = 'w:' + w.id;
         store.set(K.works, store.get(K.works, []).filter(x => x.id !== w.id));
@@ -196,6 +202,21 @@
         }
         return must(await sb.from('works').insert({ ...w, image_url }).select().single());
       },
+      async updateWork(w, patch, blob) {
+        const marker = `/${BUCKET}/`;
+        const upd = { ...patch };
+        if (blob) {
+          const path = `${S.user.id}/${Date.now()}.jpg`;
+          const up = await sb.storage.from(BUCKET).upload(path, blob, { contentType: 'image/jpeg' });
+          if (up.error) throw up.error;
+          upd.image_url = sb.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
+        }
+        const row = must(await sb.from('works').update(upd).eq('id', w.id).select().single());
+        if (blob && w.image_url && w.image_url.includes(marker)) {   // 換了新封面，順手清掉舊圖
+          await sb.storage.from(BUCKET).remove([decodeURIComponent(w.image_url.split(marker)[1])]).catch(() => {});
+        }
+        return row;
+      },
       async deleteWork(w) {
         must(await sb.from('works').delete().eq('id', w.id));
         const marker = `/${BUCKET}/`;
@@ -286,12 +307,14 @@
       el('span', { 'aria-hidden': 'true', text: '✎' }),
       el('span', { text: '留言' }),
       el('span', { class: 'count', text: '0' }));
+    const editBtn = el('button', { class: 'edit-btn', type: 'button', hidden: true, text: '編輯作品', 'aria-label': `編輯作品「${title}」` });
     const delBtn = el('button', { class: 'del-btn', type: 'button', hidden: true, text: '刪除作品', 'aria-label': `刪除作品「${title}」` });
     const clickInfo = el('span', { class: 'click-count', hidden: true, title: '累計開啟次數（同一位訪客、同一作品、同一天只算一次）' });
     const panel = el('div', { class: 'cmt-panel', id: pid, hidden: true });
-    $('.card-body', card).append(el('div', { class: 'social', 'data-key': k }, el('div', { class: 'social-row' }, likeBtn, cmtBtn, delBtn, clickInfo), panel));
+    $('.card-body', card).append(el('div', { class: 'social', 'data-key': k }, el('div', { class: 'social-row' }, likeBtn, cmtBtn, editBtn, delBtn, clickInfo), panel));
     likeBtn.addEventListener('click', () => onLike(k, likeBtn));
     cmtBtn.addEventListener('click', () => togglePanel(k, cmtBtn, panel));
+    editBtn.addEventListener('click', () => openEditWork(k));
     delBtn.addEventListener('click', () => onDeleteWork(k));
   }
 
@@ -314,7 +337,9 @@
         if (S.clicks) { const n = S.clicks.get(k) || 0; ci.textContent = `↗ 開啟 ${n} 次`; ci.setAttribute('aria-label', `已被開啟 ${n} 次`); }
       }
       const w = S.works.get(k);
-      $('.del-btn', s).hidden = !(w && S.user && (S.admin || w.author_id === S.user.id));
+      const canManage = Boolean(w && S.user && (S.admin || w.author_id === S.user.id));
+      $('.edit-btn', s).hidden = !canManage;
+      $('.del-btn', s).hidden = !canManage;
       const panel = $('.cmt-panel', s);
       if (!panel.hidden && panel.dataset.ready && S.comments.has(k)) syncPanel(k, panel);
     });
@@ -593,10 +618,81 @@
   /* ---------------------------------------------------------------
    * 分享作品表單
    * ------------------------------------------------------------- */
+  let editingKey = null;   // 目前正在編輯的作品；null＝新增模式
+  function setFormMode(k) {
+    editingKey = k;
+    $('#add-title').textContent = k ? '編輯我的作品' : '分享我的作品';
+    $('#add-submit').textContent = k ? '儲存修改' : '分享作品';
+    const hint = $('#w-image-hint');
+    if (hint) hint.textContent = k ? '（不選檔案就保留原本的封面）' : '（選填，會自動縮小）';
+  }
+  function openAddWork() {
+    const f = $('#add-form');
+    f.reset(); $('#add-error').textContent = '';
+    setFormMode(null);
+    openDlg($('#add-dialog'));
+  }
+  function openEditWork(k) {
+    const w = S.works.get(k);
+    if (!w) return;
+    if (!S.user) return needLogin('編輯作品');
+    if (!(S.admin || w.author_id === S.user.id)) { toast('只有作者本人或管理者可以編輯'); return; }
+    const f = $('#add-form');
+    f.reset(); $('#add-error').textContent = '';
+    f.elements['w-title'].value = w.title || '';
+    f.elements['w-category'].value = CAT[w.category] ? w.category : 'game';
+    f.elements['w-tags'].value = (Array.isArray(w.tags) ? w.tags : []).join(', ');
+    f.elements['w-url'].value = w.url || '';
+    f.elements['w-desc'].value = w.description || '';
+    setFormMode(k);
+    openDlg($('#add-dialog'));
+  }
+
+  async function onEditSubmit(f) {
+    const err = $('#add-error'), btn = $('#add-submit');
+    const k = editingKey, w = S.works.get(k);
+    if (!w) { closeDlg($('#add-dialog')); return; }
+    const title = f.elements['w-title'].value.trim();
+    const url = safeUrl(f.elements['w-url'].value.trim());
+    const description = f.elements['w-desc'].value.trim();
+    const category = f.elements['w-category'].value;
+    const tags = f.elements['w-tags'].value.split(/[,，、\s]+/).map(t => t.trim().slice(0, 10)).filter(Boolean).slice(0, 4);
+    const file = f.elements['w-image'].files[0];
+    if (!title) { err.textContent = '請填寫作品名稱。'; return; }
+    if (!url) { err.textContent = '請填寫以 http:// 或 https:// 開頭的作品網址。'; return; }
+    if (!CAT[category]) { err.textContent = '請選擇分類。'; return; }
+    if (file && (!/^image\//.test(file.type) || file.size > 10 * 1024 * 1024)) { err.textContent = '封面圖請選擇 10MB 以內的圖片檔。'; return; }
+    btn.disabled = true; btn.textContent = '儲存中…';
+    try {
+      const blob = file ? await toJpegBlob(file) : null;
+      const row = await api.updateWork(w, { title: title.slice(0, 60), description: description.slice(0, 300), category, url, tags }, blob);
+      S.works.set(k, row);
+      const old = $(`.project-card[data-work="${CSS.escape(k)}"]`);
+      if (old) {
+        const card = workCard(row);
+        old.replaceWith(card);
+        buildSocial(card);
+      }
+      paint();
+      if (window.TongleFilter) window.TongleFilter.refresh();
+      f.reset();
+      closeDlg($('#add-dialog'));
+      setFormMode(null);
+      toast('作品已更新！');
+    } catch (ex) {
+      console.error(ex);
+      const code = String((ex && ex.code) || '');
+      err.textContent = code === 'PGRST116' || code === '42501'
+        ? '沒有修改權限：請管理者在 Supabase 執行最新的 supabase-setup.sql（works update 規則）。'
+        : '儲存失敗，請稍後再試。若持續發生，請通知管理者。';
+    } finally { btn.disabled = false; btn.textContent = editingKey ? '儲存修改' : '分享作品'; }
+  }
+
   async function onAddSubmit(e) {
     if (e.submitter && e.submitter.value === 'cancel') return;   // 「取消」交給 dialog 原生關閉
     e.preventDefault();
     const f = e.target;
+    if (editingKey) return onEditSubmit(f);
     const err = $('#add-error');
     const btn = $('#add-submit');
     err.textContent = '';
@@ -705,7 +801,7 @@
       if (S.user) { $('#nick-input').value = nick(); $('#account-name').textContent = api.demo ? '示範模式帳號（資料只存在此瀏覽器）' : `已使用 Google 登入：${S.user.name}`; openDlg($('#account-dialog')); }
       else doSignIn();
     });
-    $('#add-work-btn').addEventListener('click', () => (S.user ? openDlg($('#add-dialog')) : needLogin('分享作品')));
+    $('#add-work-btn').addEventListener('click', () => (S.user ? openAddWork() : needLogin('分享作品')));
     $('#google-login').addEventListener('click', doSignIn);
     $('#logout-btn').addEventListener('click', async () => {
       closeDlg($('#account-dialog'));

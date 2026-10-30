@@ -113,6 +113,14 @@ create policy "works read"   on public.works for select using (true);
 create policy "works add"    on public.works for insert to authenticated with check (author_id = auth.uid());
 create policy "works delete" on public.works for delete to authenticated using (author_id = auth.uid() or public.is_admin());
 
+-- 編輯作品：只有作者本人或管理者可修改；且只開放內容欄位，作者身分（author_id、author_name、author_role）不可被改
+drop policy if exists "works update" on public.works;
+create policy "works update" on public.works for update to authenticated
+  using (author_id = auth.uid() or public.is_admin())
+  with check (author_id = auth.uid() or public.is_admin());
+revoke update on public.works from authenticated, anon;
+grant update (title, description, category, url, tags, image_url) on public.works to authenticated;
+
 drop policy if exists "likes read"   on public.likes;
 drop policy if exists "likes add"    on public.likes;
 drop policy if exists "likes delete" on public.likes;
