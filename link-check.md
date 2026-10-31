@@ -11,6 +11,7 @@
 | [https://hsiao103.github.io/tongle-monopoly/](https://hsiao103.github.io/tongle-monopoly/) | 200 |
 | [https://hsiao103.github.io/quiz-module/](https://hsiao103.github.io/quiz-module/) | 200 |
 | [https://hsiao103.github.io/tongle-town/](https://hsiao103.github.io/tongle-town/) | 200 |
+| [https://hsiao103.github.io/tongle-werewolf/](https://hsiao103.github.io/tongle-werewolf/) | 200 |
 
 七項作品頁面皆可取得。已確認入口網站有七張作品卡，其中遊戲學習三項、校園探索兩項、教學互動兩項；站內錨點及本機圖片、樣式、程式檔路徑完整，九個 SVG 可解析，JavaScript 語法檢查通過。
 

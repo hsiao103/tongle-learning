@@ -1,6 +1,6 @@
 # 同樂・學習無邊界
 
-同樂國小七項數位學習作品的一頁式入口網站。採繁體中文與臺灣用語，無需安裝套件或建置。
+同樂國小八項數位學習作品的一頁式入口網站。採繁體中文與臺灣用語，無需安裝套件或建置。
 
 ## 檔案
 
@@ -12,7 +12,7 @@
 - `supabase-setup.sql`：資料表、權限規則（RLS）與封面圖儲存空間，貼到 Supabase SQL Editor 執行。
 - `assets/`：本站自製 SVG 概念插畫與網站圖示，無外部字型或圖片依賴。
 - `.nojekyll`：讓 GitHub Pages 直接提供靜態檔案。
-- `link-check.md`：七項作品的連結檢查紀錄及驗證範圍。
+- `link-check.md`：八項作品的連結檢查紀錄及驗證範圍。
 
 ## 部署到 GitHub Pages
 
@@ -65,7 +65,7 @@
 
 作品名稱、說明與網址直接編輯 `index.html`。調整配色可修改 `styles.css` 開頭的色彩變數。分類由卡片的 `data-category` 與按鈕的 `data-filter` 對應。
 
-卡片插畫是主題示意，不是原網站截圖或精確校園模型。網站未置入追蹤碼；社群功能啟用後會載入 Supabase 的 JavaScript 套件（cdn.jsdelivr.net）並連線到你的 Supabase 專案。停用 JavaScript 仍可閱讀全部七項作品及開啟連結，分類、登入、按讚、留言與分享則需 JavaScript。
+卡片插畫是主題示意，不是原網站截圖或精確校園模型。網站未置入追蹤碼；社群功能啟用後會載入 Supabase 的 JavaScript 套件（cdn.jsdelivr.net）並連線到你的 Supabase 專案。停用 JavaScript 仍可閱讀全部八項作品及開啟連結，分類、登入、按讚、留言與分享則需 JavaScript。
 
 本次交付為可部署檔案，尚未上傳或變更任何 GitHub 儲存庫。
 
