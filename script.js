@@ -3,6 +3,7 @@
   const buttons = [...document.querySelectorAll('[data-filter]')];
   const status = document.getElementById('result-count');
   const allCount = document.querySelector('[data-filter="all"] span');
+  const ribbonCount = document.getElementById('ribbon-count');
   let current = 'all';
   // 卡片可能由 social.js 在載入後動態新增，所以每次篩選都重新取得
   const getCards = () => [...document.querySelectorAll('.project-card')];
@@ -25,6 +26,7 @@
     });
     status.textContent = `共 ${count} 項作品`;
     if (allCount) allCount.textContent = pad(cards.length);
+    if (ribbonCount) ribbonCount.textContent = pad(cards.length);
   }
   buttons.forEach(button => button.addEventListener('click', () => filterProjects(button.dataset.filter)));
   document.querySelectorAll('[data-preset]').forEach(link => {

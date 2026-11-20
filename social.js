@@ -464,8 +464,9 @@
   function insertWork(w, prepend) {
     const grid = $('.project-grid');
     const card = workCard(w);
-    const firstUser = $('.project-card[data-user-work]', grid);
-    if (prepend && firstUser) grid.insertBefore(card, firstUser); else grid.append(card);
+    // 越新的作品排越前面：社群分享的作品都排在內建作品之前，且依時間新→舊
+    if (prepend) grid.prepend(card);
+    else grid.insertBefore(card, $('.project-card:not([data-user-work])', grid));
     buildSocial(card);
   }
 
