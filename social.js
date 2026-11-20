@@ -461,12 +461,18 @@
     return el('article', { class: 'project-card', 'data-category': cat, 'data-role': role, 'data-work': k, 'data-user-work': '1' }, art, body);
   }
 
+  // 所有作品（內建＋社群分享）依時間新→舊排序；內建卡片的時間寫在 data-date
+  function sortGrid(grid) {
+    const t = c => Date.parse(c.dataset.date) || 0;
+    [...grid.querySelectorAll('.project-card')].sort((a, b) => t(b) - t(a)).forEach(c => grid.append(c));
+  }
+
   function insertWork(w, prepend) {
     const grid = $('.project-grid');
     const card = workCard(w);
-    // 越新的作品排越前面：社群分享的作品都排在內建作品之前，且依時間新→舊
-    if (prepend) grid.prepend(card);
-    else grid.insertBefore(card, $('.project-card:not([data-user-work])', grid));
+    grid.append(card);
+    card.dataset.date = w.created_at || new Date().toISOString();
+    sortGrid(grid);
     buildSocial(card);
   }
 
@@ -671,6 +677,7 @@
       const old = $(`.project-card[data-work="${CSS.escape(k)}"]`);
       if (old) {
         const card = workCard(row);
+        card.dataset.date = row.created_at || old.dataset.date;
         old.replaceWith(card);
         buildSocial(card);
       }
